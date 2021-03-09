@@ -6,12 +6,13 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='jira-reviews-reminder',
-    version='0.1.3',
+    version='0.1.4',
     url='https://github.com/bkatwal/jira-review-reminder',
     author='Bikas Katwal',
     author_email='bikas.katwal10@gmail.com',
     description='Notifies in Slack channel with a list of jira tickets that have pending review from x days. Adds the reviewer and PR details if exists.',
     long_description=long_description,
+    long_description_content_type="text/markdown",
     py_modules=['jira_review_reminder'],
     license='MIT',
     python_requires='>=3',
