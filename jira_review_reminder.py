@@ -4,6 +4,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from atlassian import Jira
 import requests
+import sys
 
 env_path = Path('.') / '.env'
 
@@ -11,18 +12,37 @@ env_path = Path('.') / '.env'
 if env_path.exists():
     load_dotenv(dotenv_path=env_path)
 nl = "\n"
-SLACK_TOKEN = os.environ['SLACK_TOKEN']
-SLACK_CHANNEL = os.environ['SLACK_CHANNEL']
-JIRA_PROJECT = os.environ['JIRA_PROJECT']
-JIRA_USER = os.environ['JIRA_USER']
-JIRA_TOKEN = os.environ['JIRA_TOKEN']
-IGNORE_JIRA = os.environ['IGNORE_JIRA']
-ISSUE_CHANGED_BEFORE = os.environ['ISSUE_CHANGED_BEFORE']
-JIRA_SERVER = os.environ['JIRA_SERVER']
-ISSUE_PAGE_SIZE = os.environ['ISSUE_PAGE_SIZE']
-GIT_WORKSPACE = os.environ['GIT_WORKSPACE']
-GIT_SERVER = os.environ['GIT_SERVER']
-JIRA_REVIEWER_FIELD = os.environ['JIRA_REVIEWER_FIELD']
+try:
+    SLACK_TOKEN = os.environ['SLACK_TOKEN']
+    SLACK_CHANNEL = os.environ['SLACK_CHANNEL']
+    JIRA_PROJECT = os.environ['JIRA_PROJECT']
+    JIRA_USER = os.environ['JIRA_USER']
+    JIRA_TOKEN = os.environ['JIRA_TOKEN']
+    JIRA_SERVER = os.environ['JIRA_SERVER']
+    JIRA_REVIEWER_FIELD = os.environ['JIRA_REVIEWER_FIELD']
+except KeyError as error:
+    sys.stderr.write('Please set the environment variable {0}'.format(error))
+    sys.exit(1)
+
+if 'ISSUE_PAGE_SIZE' in os.environ:
+    ISSUE_PAGE_SIZE = os.environ['ISSUE_PAGE_SIZE']
+else:
+    ISSUE_PAGE_SIZE = 20
+
+if 'SLACK_USERS_GROUP' in os.environ:
+    SLACK_USERS_GROUP = os.environ['SLACK_USERS_GROUP']
+else:
+    SLACK_USERS_GROUP = None
+
+if 'IGNORE_JIRA' in os.environ:
+    IGNORE_JIRA = os.environ['IGNORE_JIRA']
+else:
+    IGNORE_JIRA = ""
+
+if 'ISSUE_CHANGED_BEFORE' in os.environ:
+    ISSUE_CHANGED_BEFORE = os.environ['ISSUE_CHANGED_BEFORE']
+else:
+    ISSUE_CHANGED_BEFORE = '-1d'
 
 slack_client = slack.WebClient(token=SLACK_TOKEN)
 
@@ -35,11 +55,14 @@ ignore_jira_set = set(IGNORE_JIRA.split(","))
 
 
 def post_slack_message(prs, jira_id, reviewer_email, jira_summary):
-    # get assign slack user details
-    reviewer = slack_client.users_lookupByEmail(email=reviewer_email)
 
-    # get slack user id
-    reviewer_id = reviewer.get(key='user')['id']
+    if reviewer_email != "":
+        # get assign slack user details
+        reviewer = slack_client.users_lookupByEmail(email=reviewer_email)
+        # get slack user id
+        reviewer_id = reviewer.get(key='user')['id']
+    else:
+        reviewer_id = SLACK_USERS_GROUP
     if prs != "":
         message = f'Hey :wave-animated: <@{reviewer_id}>! There is a pending jira review you should look at. :bow: {nl}' \
                   f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> {nl}{nl} *Pull Requests:* {nl}{prs}'
@@ -103,8 +126,6 @@ def process_issue(issue):
         reviewer_email = issue['fields'][JIRA_REVIEWER_FIELD]['emailAddress']
     if 'summary' in issue['fields']:
         jira_summary = issue['fields']['summary']
-    if reviewer_email == "":
-        reviewer_email = os.environ['SLACK_USERS_GROUP']
     if jira_summary == "":
         jira_summary = jira_id
     post_slack_message(get_open_pr(issue_id), jira_id, reviewer_email, jira_summary)
@@ -116,6 +137,7 @@ def process_in_review_jira():
     all_issues = data['issues']
     for issue in all_issues:
         process_issue(issue)
+    print("Completed!!")
 
 
 if __name__ == '__main__':
