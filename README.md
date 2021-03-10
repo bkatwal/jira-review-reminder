@@ -1,6 +1,6 @@
 # Slack Bot Jira Review Reminder
 Notifies in Slack channel with a list of jira tickets that have pending review from x days. Adds the reviewer and PR details if exists.
-
+> Reviewer's names will be tagged in Slack notifications only if Jira email and slack email are same for all users
 ### Installation
 ```buildoutcfg
 pip install jira-reviews-reminder

@@ -32,7 +32,7 @@ else:
 if 'SLACK_USERS_GROUP' in os.environ:
     SLACK_USERS_GROUP = os.environ['SLACK_USERS_GROUP']
 else:
-    SLACK_USERS_GROUP = None
+    SLACK_USERS_GROUP = ""
 
 if 'IGNORE_JIRA' in os.environ:
     IGNORE_JIRA = os.environ['IGNORE_JIRA']
@@ -55,34 +55,71 @@ ignore_jira_set = set(IGNORE_JIRA.split(","))
 
 
 def post_slack_message(prs, jira_id, reviewer_email, jira_summary):
-
-    if reviewer_email != "":
-        # get assign slack user details
-        reviewer = slack_client.users_lookupByEmail(email=reviewer_email)
-        # get slack user id
-        reviewer_id = reviewer.get(key='user')['id']
+    user_found = True
+    if reviewer_email != "" and is_email(reviewer_email):
+        try:
+            # get assign slack user details
+            reviewer = slack_client.users_lookupByEmail(email=reviewer_email)
+            # get slack user id
+            reviewer_id = reviewer.get(key='user')['id']
+        except Exception as e:
+            print(f'Email {reviewer_email}, not found or no reviewer assigned. {e}')
+            reviewer_id = reviewer_email.split("@")[0]
+            user_found = False
+    elif reviewer_email != "":
+        reviewer_id = reviewer_email
+        user_found = False
     else:
         reviewer_id = SLACK_USERS_GROUP
-    if prs != "":
-        message = f'Hey :wave-animated: <@{reviewer_id}>! There is a pending jira review you should look at. :bow: {nl}' \
-                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> {nl}{nl} *Pull Requests:* {nl}{prs}'
-    else:
-        message = f'Hey :wave-animated: <@{reviewer_id}>! There is a pending jira review you should look at. :bow: {nl}' \
-                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> '
 
-    partitioner = '-'*120
+    message = get_message(reviewer_id, prs, jira_id, jira_summary, user_found)
+
+    partitioner = '-' * 120
     slack_client.chat_postMessage(channel='#' + SLACK_CHANNEL, text=message + nl + partitioner)
 
 
+def get_message(reviewer_id, prs, jira_id, jira_summary, user_found):
+    if prs != "" and reviewer_id != "" and user_found is True:
+        message = f'Hey :wave-animated: <@{reviewer_id}>! There is a pending jira review you should look at. :bow: {nl}' \
+                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> {nl}{nl} *Pull Requests:* {nl}{prs}'
+
+    elif prs != "" and reviewer_id != "" and user_found is False:
+        message = f'Hey :wave-animated: {reviewer_id}! There is a pending jira review you should look at. :bow: {nl}' \
+                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> {nl}{nl} *Pull Requests:* {nl}{prs}'
+
+    elif prs != "" and reviewer_id == "":
+        message = f'Hey :wave-animated: There is a pending jira review you should look at. :bow: {nl}' \
+                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> {nl}{nl} *Pull Requests:* {nl}{prs}'
+
+    elif prs == "" and reviewer_id != "" and user_found is True:
+        message = f'Hey :wave-animated: <@{reviewer_id}>! There is a pending jira review you should look at. :bow: {nl}' \
+                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> '
+
+    elif prs == "" and reviewer_id != "" and not user_found:
+        message = f'Hey :wave-animated: {reviewer_id}! There is a pending jira review you should look at. :bow: {nl}' \
+                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> '
+
+    else:
+        message = f'Hey :wave-animated: There is a pending jira review you should look at. :bow: {nl}' \
+                  f'*Jira:* <{JIRA_SERVER}/browse/{jira_id}|{jira_summary}> '
+    return message
+
+
 def extract_reviewers(pull_request):
-    reviewers = pull_request['reviewers']
-    if len(reviewers) == 0:
-        return None
     reviewers_str = ""
-    separator = ""
-    for reviewer in reviewers:
-        reviewers_str = reviewers_str + separator + reviewer['name']
-        separator = ", "
+    try:
+        reviewers = pull_request['reviewers']
+        if len(reviewers) == 0:
+            return None
+        separator = ""
+        for reviewer in reviewers:
+            reviewers_str = reviewers_str + separator + reviewer['name']
+            separator = ", "
+    except Exception as e:
+        print(f'Failed to extract reviews for pull_request: {pull_request}, Exception: {e}')
+
+    if reviewers_str == "":
+        reviewers_str = 'Not Assigned'
     return reviewers_str
 
 
@@ -123,7 +160,10 @@ def process_issue(issue):
         return
     issue_id = issue['id']
     if JIRA_REVIEWER_FIELD in issue['fields']:
-        reviewer_email = issue['fields'][JIRA_REVIEWER_FIELD]['emailAddress']
+        if 'emailAddress' in issue['fields'][JIRA_REVIEWER_FIELD]:
+            reviewer_email = issue['fields'][JIRA_REVIEWER_FIELD]['emailAddress']
+        else:
+            reviewer_email = issue['fields'][JIRA_REVIEWER_FIELD]['displayName']
     if 'summary' in issue['fields']:
         jira_summary = issue['fields']['summary']
     if jira_summary == "":
@@ -138,6 +178,11 @@ def process_in_review_jira():
     for issue in all_issues:
         process_issue(issue)
     print("Completed!!")
+
+
+# not using regex as names won't have @ symbol
+def is_email(val):
+    return '@' in val
 
 
 if __name__ == '__main__':

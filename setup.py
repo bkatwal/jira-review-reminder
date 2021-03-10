@@ -6,7 +6,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='jira-reviews-reminder',
-    version='0.1.4',
+    version='0.1.5',
     url='https://github.com/bkatwal/jira-review-reminder',
     author='Bikas Katwal',
     author_email='bikas.katwal10@gmail.com',
